@@ -34,8 +34,9 @@ export async function createRenderer(ctx: WebGPUContext): Promise<Renderer> {
   // cameraForward: vec3<f32> (12 bytes) + fov: f32 (4 bytes) = 16 bytes
   // cameraRight: vec3<f32> (12 bytes) + aspectRatio: f32 (4 bytes) = 16 bytes
   // cameraUp: vec3<f32> (12 bytes) + padding: f32 (4 bytes) = 16 bytes
-  // Total: 64 bytes
-  const uniformBufferSize = 64;
+  // aircraftPos: vec3<f32> (12 bytes) + padding: f32 (4 bytes) = 16 bytes
+  // Total: 80 bytes
+  const uniformBufferSize = 80;
   const uniformBuffer = device.createBuffer({
     size: uniformBufferSize,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -85,7 +86,7 @@ export async function createRenderer(ctx: WebGPUContext): Promise<Renderer> {
     },
   });
 
-  function updateUniforms(camera: CameraState, _aircraft: AircraftState, time: number): void {
+  function updateUniforms(camera: CameraState, aircraft: AircraftState, time: number): void {
     resizeCanvas(canvas);
 
     const aspect = canvas.width / canvas.height;
@@ -122,6 +123,12 @@ export async function createRenderer(ctx: WebGPUContext): Promise<Renderer> {
     floatView[13] = up[1];
     floatView[14] = up[2];
     floatView[15] = 0;
+
+    // aircraftPos (16-18) + padding (19)
+    floatView[16] = aircraft.position[0];
+    floatView[17] = aircraft.position[1];
+    floatView[18] = aircraft.position[2];
+    floatView[19] = 0;
 
     device.queue.writeBuffer(uniformBuffer, 0, uniformData);
   }

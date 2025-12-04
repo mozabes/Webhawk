@@ -221,3 +221,18 @@ export function quatNormalize(q: Quat): Quat {
   if (len === 0) return [0, 0, 0, 1];
   return [q[0] / len, q[1] / len, q[2] / len, q[3] / len];
 }
+
+export function quatFromAxisAngle(axis: Vec3, angle: number): Quat {
+  const halfAngle = angle * 0.5;
+  const s = Math.sin(halfAngle);
+  return [
+    axis[0] * s,
+    axis[1] * s,
+    axis[2] * s,
+    Math.cos(halfAngle),
+  ];
+}
+
+export function quatIdentity(): Quat {
+  return [0, 0, 0, 1];
+}

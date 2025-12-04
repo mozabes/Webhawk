@@ -5,8 +5,10 @@ import {
   vec3Scale,
   vec3Normalize,
   Quat,
-  quatFromEuler,
+  quatIdentity,
   quatNormalize,
+  quatMultiply,
+  quatFromAxisAngle,
   quatToMat4,
   Mat4,
 } from './math';
@@ -15,9 +17,6 @@ export interface AircraftState {
   position: Vec3;
   rotation: Quat;
   velocity: Vec3;
-  pitch: number;
-  yaw: number;
-  roll: number;
   throttle: number;
 }
 
@@ -42,11 +41,8 @@ const THROTTLE_ACCEL = 0.5;
 export function createAircraft(): AircraftState {
   return {
     position: vec3(0, 100, 0),
-    rotation: quatFromEuler(0, 0, 0),
+    rotation: quatIdentity(),
     velocity: vec3(0, 0, -MIN_SPEED),
-    pitch: 0,
-    yaw: 0,
-    roll: 0,
     throttle: 0.3,
   };
 }
@@ -56,39 +52,47 @@ export function updateAircraft(
   input: InputState,
   deltaTime: number
 ): AircraftState {
-  let { pitch, yaw, roll, throttle } = state;
+  let { throttle } = state;
+  let rotation = state.rotation;
 
-  // Apply pitch (W/S) - W pulls up (increases pitch), S pushes down
-  if (input.forward) pitch += PITCH_RATE * deltaTime;
-  if (input.backward) pitch -= PITCH_RATE * deltaTime;
+  // Local axes for the aircraft
+  const localRight: Vec3 = [1, 0, 0];   // X axis - pitch
+  const localUp: Vec3 = [0, 1, 0];      // Y axis - yaw
+  const localForward: Vec3 = [0, 0, 1]; // Z axis - roll
 
-  // Apply yaw (A/D) - A turns left (increases yaw), D turns right
-  const yawInfluence = Math.cos(roll) * 0.5 + 0.5;
-  if (input.left) yaw += YAW_RATE * deltaTime * yawInfluence;
-  if (input.right) yaw -= YAW_RATE * deltaTime * yawInfluence;
+  // Apply pitch (W/S) - rotation around local X axis
+  let pitchDelta = 0;
+  if (input.forward) pitchDelta += PITCH_RATE * deltaTime;
+  if (input.backward) pitchDelta -= PITCH_RATE * deltaTime;
+  if (pitchDelta !== 0) {
+    const pitchQuat = quatFromAxisAngle(localRight, pitchDelta);
+    rotation = quatMultiply(rotation, pitchQuat);
+  }
 
-  // Apply roll (Q/E)
-  if (input.rollLeft) roll -= ROLL_RATE * deltaTime;
-  if (input.rollRight) roll += ROLL_RATE * deltaTime;
+  // Apply yaw (A/D) - rotation around local Y axis
+  let yawDelta = 0;
+  if (input.left) yawDelta += YAW_RATE * deltaTime;
+  if (input.right) yawDelta -= YAW_RATE * deltaTime;
+  if (yawDelta !== 0) {
+    const yawQuat = quatFromAxisAngle(localUp, yawDelta);
+    rotation = quatMultiply(rotation, yawQuat);
+  }
 
-  // Auto-level roll slightly when turning (bank into the turn)
-  if (input.left) roll = Math.min(roll + ROLL_RATE * 0.3 * deltaTime, Math.PI / 3);
-  if (input.right) roll = Math.max(roll - ROLL_RATE * 0.3 * deltaTime, -Math.PI / 3);
+  // Apply roll (Q/E) - rotation around local Z axis
+  let rollDelta = 0;
+  if (input.rollLeft) rollDelta -= ROLL_RATE * deltaTime;
+  if (input.rollRight) rollDelta += ROLL_RATE * deltaTime;
+  if (rollDelta !== 0) {
+    const rollQuat = quatFromAxisAngle(localForward, rollDelta);
+    rotation = quatMultiply(rotation, rollQuat);
+  }
+
+  // Normalize to prevent drift
+  rotation = quatNormalize(rotation);
 
   // Throttle control (Shift/Ctrl)
   if (input.throttleUp) throttle = Math.min(throttle + THROTTLE_ACCEL * deltaTime, 1.0);
   if (input.throttleDown) throttle = Math.max(throttle - THROTTLE_ACCEL * deltaTime, 0.0);
-
-  // Clamp pitch
-  pitch = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, pitch));
-
-  // Dampen roll back to center when not actively rolling
-  if (!input.rollLeft && !input.rollRight && !input.left && !input.right) {
-    roll *= 0.97;
-  }
-
-  // Build rotation quaternion
-  const rotation = quatNormalize(quatFromEuler(pitch, yaw, roll));
 
   // Get forward direction from rotation matrix
   const rotMat = quatToMat4(rotation);
@@ -111,9 +115,6 @@ export function updateAircraft(
     position,
     rotation,
     velocity,
-    pitch,
-    yaw,
-    roll,
     throttle,
   };
 }
